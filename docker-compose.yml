@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  ml_pipeline:
+    build: .
+    container_name: ml_trading_pipeline
+    environment:
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-trading_db}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    volumes:
+      - ./models:/app/models  # Persist trained models
+      - ./data:/app/data      # Data storage
+    command: python run_full_pipeline.py --db-host ${DB_HOST:-localhost} --db-password ${DB_PASSWORD:-postgres}
+    networks:
+      - trading_network
+
+networks:
+  trading_network:
+    external: true  # Connect to Phase 1 network
