@@ -7,7 +7,8 @@ from .feature_selection import (
     remove_highly_correlated_features,
     select_top_features_by_importance,
     select_features_by_shap,
-    select_features_by_permutation
+    select_features_by_permutation,
+    select_features_combined
 )
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     'remove_highly_correlated_features',
     'select_top_features_by_importance',
     'select_features_by_shap',
-    'select_features_by_permutation'
+    'select_features_by_permutation',
+    'select_features_combined'
 ]
