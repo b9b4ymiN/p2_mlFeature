@@ -12,6 +12,8 @@ from .regressors import XGBoostPricePredictor, NeuralNetRegressor
 from .lstm_forecaster import LSTMForecaster
 from .ensemble import EnsembleModel
 from .validation import WalkForwardValidator, ModelInterpreter
+from .preprocessing import scale_train_val_test, FeatureScaler
+from typing import Optional
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -25,12 +27,17 @@ class MLTrainingPipeline:
         self.models = {}
         self.ensemble = None
         self.results = {}
+        self.scaler = None
+        self.feature_set_id = None
 
     def run_full_pipeline(
         self,
         X_train, y_train_class, y_train_reg,
         X_val, y_val_class, y_val_reg,
         X_test, y_test_class, y_test_reg,
+        feature_set_id: Optional[str] = None,
+        scaler_type: str = 'standard',
+        apply_scaling: bool = True,
         skip_lstm=False,
         skip_catboost=False
     ):
@@ -41,6 +48,9 @@ class MLTrainingPipeline:
             X_train, y_train_class, y_train_reg: Training data
             X_val, y_val_class, y_val_reg: Validation data
             X_test, y_test_class, y_test_reg: Test data
+            feature_set_id: Feature set ID for scaler artifact
+            scaler_type: Type of scaler ('standard', 'minmax', 'robust')
+            apply_scaling: Whether to apply feature scaling
             skip_lstm: Skip LSTM training (requires torch)
             skip_catboost: Skip CatBoost training
         """
@@ -48,6 +58,27 @@ class MLTrainingPipeline:
         print("="*70)
         print("PHASE 3: ML TRAINING PIPELINE")
         print("="*70)
+
+        # Step 0: Preprocessing (Scaling)
+        if apply_scaling:
+            print("\n[0/6] Preprocessing: Feature Scaling...")
+
+            if feature_set_id is None:
+                feature_set_id = f"pipeline_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}"
+
+            self.feature_set_id = feature_set_id
+
+            # Scale features (FIT on train only!)
+            X_train, X_val, X_test, self.scaler = scale_train_val_test(
+                X_train, X_val, X_test,
+                feature_set_id=feature_set_id,
+                scaler_type=scaler_type
+            )
+
+            print(f"✓ Scaling complete (type={scaler_type})")
+        else:
+            print("\n[0/6] Skipping feature scaling (apply_scaling=False)")
+            self.feature_set_id = feature_set_id or "unscaled"
 
         # Step 1: Train classifiers
         print("\n[1/6] Training Classification Models...")
