@@ -5,9 +5,172 @@ Implements 100+ features from OI, Price, Volume, Funding, and other data sources
 
 import pandas as pd
 import numpy as np
-import pandas_ta as ta
 from typing import Dict, List, Optional
 from scipy.stats import linregress
+
+# Make pandas_ta optional
+try:
+    import pandas_ta as ta
+    HAS_PANDAS_TA = True
+except ImportError:
+    HAS_PANDAS_TA = False
+    # Provide basic alternative implementations
+    class _BasicTA:
+        """Basic technical analysis functions when pandas_ta is not available"""
+
+        @staticmethod
+        def rsi(series, length=14):
+            """Calculate RSI"""
+            delta = series.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=length).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=length).mean()
+            rs = gain / loss
+            return 100 - (100 / (1 + rs))
+
+        @staticmethod
+        def sma(series, length):
+            """Simple Moving Average"""
+            return series.rolling(window=length).mean()
+
+        @staticmethod
+        def ema(series, length):
+            """Exponential Moving Average"""
+            return series.ewm(span=length, adjust=False).mean()
+
+        @staticmethod
+        def macd(series, fast=12, slow=26, signal=9):
+            """MACD indicator"""
+            ema_fast = series.ewm(span=fast, adjust=False).mean()
+            ema_slow = series.ewm(span=slow, adjust=False).mean()
+            macd_line = ema_fast - ema_slow
+            signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+            histogram = macd_line - signal_line
+            result = pd.DataFrame({
+                'MACD_12_26_9': macd_line,
+                'MACDs_12_26_9': signal_line,
+                'MACDh_12_26_9': histogram
+            })
+            return result
+
+        @staticmethod
+        def stoch(high, low, close, k=14, d=3, smooth_k=3):
+            """Stochastic Oscillator"""
+            lowest_low = low.rolling(window=k).min()
+            highest_high = high.rolling(window=k).max()
+            stoch_k = 100 * (close - lowest_low) / (highest_high - lowest_low)
+            stoch_k = stoch_k.rolling(window=smooth_k).mean()
+            stoch_d = stoch_k.rolling(window=d).mean()
+            result = pd.DataFrame({
+                'STOCHk_14_3_3': stoch_k,
+                'STOCHd_14_3_3': stoch_d
+            })
+            return result
+
+        @staticmethod
+        def roc(series, length=10):
+            """Rate of Change"""
+            return ((series - series.shift(length)) / series.shift(length)) * 100
+
+        @staticmethod
+        def willr(high, low, close, length=14):
+            """Williams %R"""
+            highest_high = high.rolling(window=length).max()
+            lowest_low = low.rolling(window=length).min()
+            return -100 * (highest_high - close) / (highest_high - lowest_low)
+
+        @staticmethod
+        def atr(high, low, close, length=14):
+            """Average True Range"""
+            tr1 = high - low
+            tr2 = abs(high - close.shift())
+            tr3 = abs(low - close.shift())
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            return tr.rolling(window=length).mean()
+
+        @staticmethod
+        def bbands(series, length=20, std=2):
+            """Bollinger Bands"""
+            sma = series.rolling(window=length).mean()
+            rolling_std = series.rolling(window=length).std()
+            upper = sma + (rolling_std * std)
+            lower = sma - (rolling_std * std)
+            result = pd.DataFrame({
+                'BBL_20_2.0': lower,
+                'BBM_20_2.0': sma,
+                'BBU_20_2.0': upper,
+                'BBB_20_2.0': (upper - lower) / sma,
+                'BBP_20_2.0': (series - lower) / (upper - lower)
+            })
+            return result
+
+        @staticmethod
+        def adx(high, low, close, length=14):
+            """Average Directional Index"""
+            # Simplified ADX calculation
+            tr = pd.concat([
+                high - low,
+                abs(high - close.shift()),
+                abs(low - close.shift())
+            ], axis=1).max(axis=1)
+
+            up_move = high - high.shift()
+            down_move = low.shift() - low
+
+            plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0), index=high.index)
+            minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0), index=high.index)
+
+            atr_val = tr.rolling(window=length).mean()
+            plus_di = 100 * (plus_dm.rolling(window=length).mean() / atr_val)
+            minus_di = 100 * (minus_dm.rolling(window=length).mean() / atr_val)
+
+            dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+            adx_val = dx.rolling(window=length).mean()
+
+            result = pd.DataFrame({
+                'ADX_14': adx_val,
+                'DMP_14': plus_di,
+                'DMN_14': minus_di
+            })
+            return result
+
+        @staticmethod
+        def obv(close, volume):
+            """On-Balance Volume"""
+            obv = pd.Series(index=close.index, dtype=float)
+            obv.iloc[0] = volume.iloc[0]
+            for i in range(1, len(close)):
+                if close.iloc[i] > close.iloc[i-1]:
+                    obv.iloc[i] = obv.iloc[i-1] + volume.iloc[i]
+                elif close.iloc[i] < close.iloc[i-1]:
+                    obv.iloc[i] = obv.iloc[i-1] - volume.iloc[i]
+                else:
+                    obv.iloc[i] = obv.iloc[i-1]
+            return obv
+
+        @staticmethod
+        def cmf(high, low, close, volume, length=20):
+            """Chaikin Money Flow"""
+            mfm = ((close - low) - (high - close)) / (high - low)
+            mfm = mfm.fillna(0)
+            mfv = mfm * volume
+            return mfv.rolling(window=length).sum() / volume.rolling(window=length).sum()
+
+        @staticmethod
+        def mfi(high, low, close, volume, length=14):
+            """Money Flow Index"""
+            typical_price = (high + low + close) / 3
+            raw_money_flow = typical_price * volume
+
+            positive_flow = pd.Series(np.where(typical_price > typical_price.shift(1), raw_money_flow, 0), index=high.index)
+            negative_flow = pd.Series(np.where(typical_price < typical_price.shift(1), raw_money_flow, 0), index=high.index)
+
+            positive_mf = positive_flow.rolling(window=length).sum()
+            negative_mf = negative_flow.rolling(window=length).sum()
+
+            mfi = 100 - (100 / (1 + positive_mf / negative_mf))
+            return mfi
+
+    ta = _BasicTA()
 
 
 class FeatureEngineer:
@@ -500,7 +663,7 @@ class FeatureEngineer:
             print("Warning: longShortRatio column not found after merge")
             return df
 
-        ls_ratio = df['longShortRatio'].fillna(method='ffill')
+        ls_ratio = df['longShortRatio'].ffill()
 
         # Changes in ratio
         df['ls_ratio_change_1h'] = ls_ratio.diff(12)
