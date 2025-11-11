@@ -48,6 +48,9 @@ data/
 # Feature store
 feature_store/
 
+# Artifacts (generated during pipeline runs)
+artifacts/
+
 # Logs
 *.log
 
